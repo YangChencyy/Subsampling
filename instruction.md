@@ -116,39 +116,29 @@ validation-set-i-row-ordinals:
 
 validation-set-i-column-ordinals:
 
-	The	column ordinals for the columns in the validation set data, not including
-	the case number or outcome column ordinals.  This may be needed by the
-	machine learning step or the validation step.
+	The	column ordinals for the columns in the validation set data, not including the case number or outcome column ordinals.  This may be needed by the machine learning step or the validation step.
 
 2 files for each training set:
 
 training-set-i:
 
-	The training set data, the randomly selected row and columns (plus the case
-	number and outcome column). Ex. training-set-1, training-set-2, etc.
+	The training set data, the randomly selected row and columns (plus the case number and outcome column). Ex. training-set-1, training-set-2, etc.
 
 training-set-i-row-ordinals:
 
-	The	row ordinals for the rows in the training set data.  This may be needed
-	by the machine learning step or the training step.
+	The	row ordinals for the rows in the training set data.  This may be needed by the machine learning step or the training step.
 
-There is no file for training set column ordinals, because for Option 2 a
-training set uses the same columns as its validation set.
+There is no file for training set column ordinals, because for Option 2 a training set uses the same columns as its validation set.
 
 ********************
 create-test-data-set
 ********************
 
-This created a test data set, including a header line, with command line
-options for specifying the number of rows and number of columns.
+This created a test data set, including a header line, with command line options for specifying the number of rows and number of columns.
 
-Each value in a field contains the row number and column number (except for the
-header, which just has the column number).
+Each value in a field contains the row number and column number (except for the header, which just has the column number).
 
-This makes it easy to determine if the training sets are correct - include the
-correct rows and columns for each training set, exclude the rows for the
-validation set and the rows and columns of a training set are not exactly the
-same as those of another (in the vast majority of cases).
+This makes it easy to determine if the training sets are correct - include the correct rows and columns for each training set, exclude the rows for the validation set and the rows and columns of a training set are not exactly the same as those of another (in the vast majority of cases).
 
 An example test data set with 10 rows and 10 columns:
 
@@ -172,8 +162,7 @@ These use the above test file.
 
 They assume the scripts are in the command search path.
 
-See the description above of script create-sets.py for a description of the
-contents of the files produced.
+See the description above of script create-sets.py for a description of the contents of the files produced.
 
 ****************
 Option 1 example:
