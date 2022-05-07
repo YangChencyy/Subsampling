@@ -1,3 +1,4 @@
+"""
 #!/usr/bin/env python3
 
 # CBDA validation and training set creation.
@@ -92,7 +93,7 @@
 #        A validation set file for each training set file.
 #            A training set file will not contain any of the original data file
 #            lines as its corresponding validation set file. 
-
+"""
 import sys
 import argparse
 import os

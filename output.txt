@@ -1,7 +1,0 @@
-here
-['9', '45']
-['8', '34']
-['7', '23']
-['6', '3']
-Creating SelectionSet objects......Done
-Creating SelectionSet files......Done
