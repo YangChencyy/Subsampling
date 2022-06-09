@@ -94,11 +94,13 @@
 #            A training set file will not contain any of the original data file
 #            lines as its corresponding validation set file. 
 """
+from ast import Index
 import sys
 import argparse
 import os
 import pickle
 import random
+import numpy as np
 
 from pyrsistent import field
 
@@ -124,6 +126,23 @@ class SelectionSet:
         self.rowOrdinals = None
         self.outputColumns = None
         self.setFile = None
+
+    def getRandomOrdinalsEx(self, count, type):
+        if type == "validation":
+            with open('spliting.npy', 'rb') as f:
+                _ = np.load(f)
+                validation = np.load(f)
+            index = random.sample(range(0, len(validation)), count)
+            ordinalList = validation[index]
+            ordinalSet = set(ordinalList)
+        else:
+            with open('spliting.npy', 'rb') as f:
+                training = np.load(f)
+                _ = np.load(f)
+            index = random.sample(range(0, len(training)), count)
+            ordinalList = training[index]
+            ordinalSet = set(ordinalList)
+        return ordinalSet
 
     def getRandomOrdinals(self, count, end):
 
@@ -239,7 +258,11 @@ class ValidationSet(SelectionSet):
         self.ordinal = ordinal
 
         # 2, to skip the ordinal for the original file header line.
-        self.rowOrdinals = self.getRandomOrdinals(args.validationRowCount, 
+        if args.external:
+            self.rowOrdinals = self.getRandomOrdinalsEx(args.validationRowCount, 
+                                                  "validation")
+        else:    
+            self.rowOrdinals = self.getRandomOrdinals(args.validationRowCount, 
                                                   originalLineCount)
 
         # Determine the columns to use for this validation set. If a column set
@@ -353,7 +376,11 @@ class TrainingSet(SelectionSet):
         # The rows (lines) of the original data file to be written to this
         # training set.
         # 2, to skip the ordinal for the original file header line.
-        self.rowOrdinals = self.getRandomOrdinalsExclude(args.trainingRowCount, \
+        if args.external:
+            self.rowOrdinals = self.getRandomOrdinalsEx(args.validationRowCount, 
+                                                  "training")
+        else:
+            self.rowOrdinals = self.getRandomOrdinalsExclude(args.trainingRowCount, \
                                                         2, originalLineCount, \
                                               excludeValidationSet.rowOrdinals)
 
@@ -436,11 +463,11 @@ def defineArgs(args=None):
     parser.add_argument('--oc', '--outcome-column', dest='outcomeColumn', \
                         help=msg, type=int, required=True)
 
-    msg = 'If present create a validation set for each training set.'
-    msg += ' Otherwise create only one validation set.'
+    msg = 'If present, just create a validation set for all training sets.'
+    msg += ' Otherwise create only a validation set for each training set.'
     parser.add_argument('--mvs', '--multiple-validation-set', \
                         dest='multipleValidationSet', help=msg, \
-                        action='store_true', default=False)
+                        action='store_false', default=True)
 
     msg = 'The number of training sets to create'
     parser.add_argument('--tsc', '--training-set-count', \
@@ -456,6 +483,22 @@ def defineArgs(args=None):
     msg += ' to use'
     parser.add_argument('--cs', '--column-set', dest='columnSetFileName', \
                         help=msg, type=str, default=None, required=False)
+    
+    msg = 'Whether or not doing external subsampling.'
+    parser.add_argument('--ex', '--external', \
+                        dest='external', help=msg, \
+                        action='store_true', default=False)
+
+    
+    msg = 'For external subsampling, setting the percentage of training samples'
+    parser.add_argument('--tr', '--training-percent', dest='trainingPercent', \
+                        help=msg, type=float, default=0.8, required=False)
+    
+    msg = 'Whether or not choosing columns in ascending order in each training/validation set..'
+    parser.add_argument('--asc', '--ascending', \
+                        dest='ascendingCol', help=msg, \
+                        action='store_true', default=False)
+
 
     args = parser.parse_args()
     
@@ -584,6 +627,11 @@ def checkArgs(originalLineCount, originalColumnCount, args):
         print(msg)
         argsOk = False
 
+    if args.trainingPercent <= 0.0 or args.trainingPercent >= 1.0:
+        msg = 'Training percent should between 0 and 1'
+        print(msg)
+        argsOk = False
+
     if not argsOk:
         sys.exit(1)
 
@@ -615,7 +663,7 @@ def getColumnSet(originalColumnCount, args):
 			# Delete trailing newline so it isn't treated as part of the values
 			# read.
             fields = line.rstrip('\n').split(',')
-            print(fields)
+            # print(fields)
 
             try:
                 column = int(fields[1])
@@ -673,44 +721,86 @@ def createSelectionSets(originalLineCount, originalColumnCount, args, \
     # might be needed to avoid the system max open file limit.
     #
     # Otherwise load a previously created one from a file.
-    singleValidationSet = None
-    if not args.multipleValidationSet:
-
-        if args.startingSetNumber == 1:
-    		# -1 for the set ordinal because there is only one validation set, not
-    		# one per training set.
+    if args.ascendingCol:
+        endingSetNumber = args.startingSetNumber - 1 + args.trainingSetCount
+        for i in range(args.startingSetNumber, endingSetNumber + 1):
             try:
-                singleValidationSet = ValidationSet(-1, originalLineCount, \
-                                                   originalColumnCount, args, \
-                                                   columnSet, save=True)
-                selectionSets.append(singleValidationSet)
+                singleValidationSet = None
+                if not args.multipleValidationSet:
+
+                    if args.startingSetNumber == 1:
+                        # -1 for the set ordinal because there is only one validation set, not
+                        # one per training set.
+                        try:
+                            singleValidationSet = ValidationSet(-1, originalLineCount, \
+                                                            originalColumnCount, args, \
+                                                            columnSet, save=True)
+                            selectionSets.append(singleValidationSet)
+                        except (Exception) as e:
+                            msg = 'An exception occured creating the single validation set:'
+                            msg += '\n{0}'
+                            msg = msg.format(e)
+                            print(msg)
+                            sys.exit(1)
+                    else:
+                        # Load the validation set created on a prior run of this script,
+                        # when the starting set number was 1. Needed so the training sets
+                        # know not to create their own validation sets.
+                        loadFileName = 'validation-set.pickle'
+                        with open(loadFileName, 'rb') as loadFile:
+                            singleValidationSet = pickle.load(loadFile)
+                
+
+                trSet = TrainingSet(i, originalLineCount, originalColumnCount, \
+                                    singleValidationSet, args, columnSet)
+                args.columnCount += 1
+                columnSet = getColumnSet(originalColumnCount, args)
+
+                selectionSets.append(trSet)
             except (Exception) as e:
-                msg = 'An exception occured creating the single validation set:'
-                msg += '\n{0}'
-                msg = msg.format(e)
+                msg = 'An exception occured creating TrainingSet {0} of {1}:\n{2}'
+                msg = msg.format(i, args.trainingSetCount, e)
                 print(msg)
                 sys.exit(1)
-        else:
-			# Load the validation set created on a prior run of this script,
-			# when the starting set number was 1. Needed so the training sets
-			# know not to create their own validation sets.
-            loadFileName = 'validation-set.pickle'
-            with open(loadFileName, 'rb') as loadFile:
-                singleValidationSet = pickle.load(loadFile)
-            
+    else:
+        singleValidationSet = None
+        if not args.multipleValidationSet:
 
-    # Create the training sets.
-    endingSetNumber = args.startingSetNumber - 1 + args.trainingSetCount
-    for i in range(args.startingSetNumber, endingSetNumber + 1):
-        try:
-            trSet = TrainingSet(i, originalLineCount, originalColumnCount, \
-                                singleValidationSet, args, columnSet)
-            selectionSets.append(trSet)
-        except (Exception) as e:
-            msg = 'An exception occured creating TrainingSet {0} of {1}:\n{2}'
-            msg = msg.format(i, args.trainingSetCount, e)
-            print(msg)
-            sys.exit(1)
+            if args.startingSetNumber == 1:
+                # -1 for the set ordinal because there is only one validation set, not
+                # one per training set.
+                try:
+                    singleValidationSet = ValidationSet(-1, originalLineCount, \
+                                                    originalColumnCount, args, \
+                                                    columnSet, save=True)
+                    selectionSets.append(singleValidationSet)
+                except (Exception) as e:
+                    msg = 'An exception occured creating the single validation set:'
+                    msg += '\n{0}'
+                    msg = msg.format(e)
+                    print(msg)
+                    sys.exit(1)
+            else:
+                # Load the validation set created on a prior run of this script,
+                # when the starting set number was 1. Needed so the training sets
+                # know not to create their own validation sets.
+                loadFileName = 'validation-set.pickle'
+                with open(loadFileName, 'rb') as loadFile:
+                    singleValidationSet = pickle.load(loadFile)
+                
+
+        # Create the training sets.
+        endingSetNumber = args.startingSetNumber - 1 + args.trainingSetCount
+        for i in range(args.startingSetNumber, endingSetNumber + 1):
+            try:
+                trSet = TrainingSet(i, originalLineCount, originalColumnCount, \
+                                    singleValidationSet, args, columnSet)
+                selectionSets.append(trSet)
+            except (Exception) as e:
+                msg = 'An exception occured creating TrainingSet {0} of {1}:\n{2}'
+                msg = msg.format(i, args.trainingSetCount, e)
+                print(msg)
+                sys.exit(1)
 
     print('...Done')
     return selectionSets
@@ -725,6 +815,17 @@ with open(args.originalDataFileInfo, 'rb') as odfiFile:
     (originalLineCount, originalColumnCount) = pickle.load(odfiFile)
 
 checkArgs(originalLineCount, originalColumnCount, args)
+
+if args.external:
+    all = np.arange(2, originalLineCount + 1)
+    # print(len(all))
+    np.random.shuffle(all)
+    training = all[0:int(originalLineCount*args.trainingPercent)]
+    validation = all[int(originalLineCount*args.trainingPercent)+1:]
+    with open('spliting.npy', 'wb') as f:
+        np.save(f, training)
+        np.save(f, validation)
+
 
 # If requested get a restricted set of column ordinals to use.
 columnSet = None
